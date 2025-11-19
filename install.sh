@@ -1,0 +1,512 @@
+#!/bin/bash
+# iTerm2 AI Command Generator - Installation Script
+
+set -e
+
+SCRIPT_NAME="ai_command_generator.py"
+# iTerm2 uses ~/.config/iterm2/AppSupport for scripts
+PLUGIN_DIR="$HOME/.config/iterm2/AppSupport/Scripts/AutoLaunch"
+ITERM2_ENV_DIR="$HOME/.config/iterm2/AppSupport/iterm2env"
+
+echo "iTerm2 AI Command Generator 설치를 시작합니다..."
+
+# Check if iTerm2 is installed
+if [ ! -d "/Applications/iTerm.app" ]; then
+    echo "오류: iTerm2가 설치되어 있지 않습니다."
+    echo "https://iterm2.com 에서 iTerm2를 먼저 설치해주세요."
+    exit 1
+fi
+
+# Check if iTerm2 Python Runtime is installed
+if [ ! -d "$ITERM2_ENV_DIR" ]; then
+    echo ""
+    echo "오류: iTerm2 Python Runtime이 설치되어 있지 않습니다."
+    echo ""
+    echo "다음 단계를 따라 설치해주세요:"
+    echo "  1. iTerm2 실행"
+    echo "  2. Scripts > Manage > Install Python Runtime"
+    echo "  3. 설치 완료 후 이 스크립트를 다시 실행"
+    echo ""
+    exit 1
+fi
+
+# Find iTerm2 pip
+ITERM2_PIP=$(find "$ITERM2_ENV_DIR" -name "pip3" -type f 2>/dev/null | head -1)
+
+if [ -z "$ITERM2_PIP" ]; then
+    echo "오류: iTerm2 Python Runtime의 pip를 찾을 수 없습니다."
+    exit 1
+fi
+
+echo "iTerm2 Python Runtime을 찾았습니다: $ITERM2_PIP"
+
+# Create AutoLaunch directory if it doesn't exist
+if [ ! -d "$PLUGIN_DIR" ]; then
+    echo "AutoLaunch 디렉토리를 생성합니다..."
+    mkdir -p "$PLUGIN_DIR"
+fi
+
+# Install Python dependencies using iTerm2's pip
+echo "Python 의존성을 설치합니다..."
+"$ITERM2_PIP" install -r requirements.txt
+
+# Copy script to AutoLaunch folder
+echo "플러그인을 설치합니다..."
+
+# Remove old installation if exists
+rm -rf "$PLUGIN_DIR/ai_command_generator"
+rm -rf "$PLUGIN_DIR/ai_command_generator.py"
+
+# Create plugin directory (folder with .py extension for iTerm2)
+PLUGIN_SCRIPT_DIR="$PLUGIN_DIR/ai_command_generator.py"
+mkdir -p "$PLUGIN_SCRIPT_DIR"
+
+# Copy all source files
+cp src/models.py "$PLUGIN_SCRIPT_DIR/"
+cp src/exceptions.py "$PLUGIN_SCRIPT_DIR/"
+cp src/config.py "$PLUGIN_SCRIPT_DIR/"
+cp src/risk_detector.py "$PLUGIN_SCRIPT_DIR/"
+cp src/gemini_client.py "$PLUGIN_SCRIPT_DIR/"
+cp src/history_manager.py "$PLUGIN_SCRIPT_DIR/"
+
+# Create main entry point as __main__.py (required for folder-based scripts)
+cat > "$PLUGIN_SCRIPT_DIR/__main__.py" << 'EOF'
+#!/usr/bin/env python3
+"""iTerm2 AI Command Generator - Main Script."""
+
+import asyncio
+import logging
+from typing import Optional
+from pathlib import Path
+
+import iterm2
+
+# Setup logging
+log_dir = Path.home() / ".config" / "iterm2-ai-generator"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / "debug.log"
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+    ]
+)
+logger = logging.getLogger("iterm2-ai-generator")
+
+from config import ConfigManager
+from exceptions import APIError, KeychainError, RateLimitError
+from gemini_client import GeminiClient
+from history_manager import HistoryManager
+from models import GeneratedCommand, RiskLevel
+
+
+class AICommandGenerator:
+    """Main iTerm2 AI Command Generator application."""
+
+    def __init__(
+        self,
+        connection: iterm2.Connection,
+        config_manager: ConfigManager,
+        gemini_client: GeminiClient
+    ):
+        self.connection = connection
+        self.config_manager = config_manager
+        self.gemini_client = gemini_client
+        self.history_manager = HistoryManager(max_items=config_manager.get_max_history())
+        self.app = None
+
+    async def run(self) -> None:
+        """Start the main event loop."""
+        logger.info("AI Command Generator 시작")
+        self.app = await iterm2.async_get_app(self.connection)
+
+        # Ensure API key is configured
+        if not await self._ensure_api_key():
+            logger.error("API 키 설정 실패")
+            return
+
+        logger.info("API 키 확인 완료, 키보드 모니터링 시작")
+        # Set up keyboard monitoring
+        await self._setup_keyboard_monitoring()
+
+    async def _ensure_api_key(self) -> bool:
+        """Ensure API key is configured, prompt if not."""
+        api_key = self.config_manager.get_api_key()
+
+        if not api_key:
+            # Show first-run setup dialog
+            api_key = await self._show_api_key_setup()
+
+            if not api_key:
+                return False
+
+            try:
+                self.config_manager.set_api_key(api_key)
+                # Reinitialize Gemini client with new key
+                self.gemini_client = GeminiClient(api_key)
+            except KeychainError as e:
+                await self._show_error(f"API 키 저장 실패: {e}")
+                return False
+
+        return True
+
+    async def _show_api_key_setup(self) -> Optional[str]:
+        """Show API key setup dialog using native macOS dialog."""
+        apple_script = '''
+display dialog "Google Gemini API 키를 입력하세요.\\n(https://aistudio.google.com/apikey 에서 발급)" default answer "" with title "Gemini API 키 설정" buttons {"취소", "확인"} default button "확인"
+'''
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", apple_script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            return None
+
+        output = stdout.decode("utf-8").strip()
+        if "text returned:" in output:
+            return output.split("text returned:", 1)[1].strip()
+        return None
+
+    async def _setup_keyboard_monitoring(self) -> None:
+        """Set up keyboard shortcut monitoring."""
+        async with iterm2.KeystrokeMonitor(self.connection) as mon:
+            while True:
+                keystroke = await mon.async_get()
+
+                # Check for Ctrl+Shift+A (AI command generation)
+                if (keystroke.keycode == iterm2.Keycode.ANSI_A and
+                    iterm2.Modifier.CONTROL in keystroke.modifiers and
+                    iterm2.Modifier.SHIFT in keystroke.modifiers):
+
+                    try:
+                        session = self.app.current_terminal_window.current_tab.current_session
+                        # Run as concurrent task to allow multiple requests
+                        asyncio.create_task(self.handle_shortcut(session))
+                    except Exception as e:
+                        await self._show_error(f"오류 발생: {e}")
+
+                # Check for Ctrl+Shift+H (History)
+                elif (keystroke.keycode == iterm2.Keycode.ANSI_H and
+                      iterm2.Modifier.CONTROL in keystroke.modifiers and
+                      iterm2.Modifier.SHIFT in keystroke.modifiers):
+
+                    try:
+                        session = self.app.current_terminal_window.current_tab.current_session
+                        asyncio.create_task(self.show_history_dialog(session))
+                    except Exception as e:
+                        await self._show_error(f"오류 발생: {e}")
+
+    async def handle_shortcut(self, session: iterm2.Session) -> None:
+        """Handle the activation shortcut."""
+        # Get window ID for dialogs
+        window = self.app.current_terminal_window
+        window_id = window.window_id if window else None
+
+        # Show input dialog
+        user_input = await self.show_input_dialog(window_id)
+        if not user_input:
+            logger.debug("사용자가 입력을 취소함")
+            return
+
+        logger.info(f"명령어 생성 요청: {user_input[:50]}...")
+
+        # Get context
+        working_directory = await session.async_get_variable("path") or "~"
+        shell_type = await session.async_get_variable("shell") or "bash"
+
+        # Extract shell name from path
+        if "/" in shell_type:
+            shell_type = shell_type.split("/")[-1]
+
+        # Generate command with timeout
+        try:
+            command = await asyncio.wait_for(
+                self.gemini_client.generate_command(
+                    user_input,
+                    working_directory,
+                    shell_type
+                ),
+                timeout=30.0  # 30 second timeout
+            )
+            logger.info(f"명령어 생성 완료: {command.command}")
+        except asyncio.TimeoutError:
+            logger.error("API 타임아웃")
+            await self._show_error("명령어 생성 시간이 초과되었습니다.\n다시 시도해주세요.")
+            return
+        except RateLimitError as e:
+            logger.error(f"API 한도 초과: {e}")
+            await self._show_error(f"API 한도 초과: {e}\n잠시 후 다시 시도해주세요.")
+            return
+        except APIError as e:
+            logger.error(f"API 오류: {e}")
+            await self._show_error(f"명령어 생성 실패: {e}")
+            return
+        except Exception as e:
+            logger.exception(f"예상치 못한 오류: {e}")
+            await self._show_error(f"오류 발생: {e}")
+            return
+
+        # Check for dangerous commands - show warning only for dangerous ones
+        if command.risk_level == RiskLevel.DANGEROUS:
+            if not await self._show_dangerous_warning(window_id, command):
+                return
+        elif command.risk_level == RiskLevel.WARNING:
+            if not await self._show_warning(window_id, command):
+                return
+
+        # Save to history and send to terminal directly (no confirmation popup)
+        self.history_manager.add(user_input, command.command)
+        await self.send_to_terminal(session, command.command)
+
+    async def show_input_dialog(self, window_id: Optional[str]) -> Optional[str]:
+        """Show natural language input dialog using native macOS dialog."""
+        apple_script = '''
+display dialog "원하는 작업을 자연어로 설명하세요.\\n예: 지난 7일간 수정된 파일 찾기" default answer "" with title "AI 명령어 생성" buttons {"취소", "확인"} default button "확인"
+'''
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", apple_script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            return None
+
+        output = stdout.decode("utf-8").strip()
+        if "text returned:" in output:
+            return output.split("text returned:", 1)[1].strip()
+        return None
+
+    async def show_command_dialog(
+        self,
+        window_id: Optional[str],
+        command: GeneratedCommand
+    ) -> str:
+        """Show generated command confirmation dialog."""
+        # Build subtitle with risk indicator
+        risk_indicator = ""
+        if command.risk_level == RiskLevel.WARNING:
+            risk_indicator = "⚠️ 주의: "
+        elif command.risk_level == RiskLevel.DANGEROUS:
+            risk_indicator = "🚨 위험: "
+
+        subtitle = f"{risk_indicator}생성된 명령어:\n\n{command.command}"
+
+        if command.risk_reasons:
+            subtitle += f"\n\n경고: {', '.join(command.risk_reasons)}"
+
+        alert = iterm2.Alert("명령어 확인", subtitle, window_id)
+        alert.add_button("실행")
+        alert.add_button("설명")
+        alert.add_button("저장")
+        alert.add_button("취소")
+
+        result = await alert.async_run(self.connection)
+
+        # Button indices: 1000=실행, 1001=설명, 1002=저장, 1003=취소
+        if result == 1000:
+            return "confirm"
+        elif result == 1001:
+            return "explain"
+        elif result == 1002:
+            return "save"
+        else:
+            return "cancel"
+
+    async def show_explanation_dialog(
+        self,
+        window_id: Optional[str],
+        command: str,
+        explanation: str
+    ) -> None:
+        """Show command explanation dialog."""
+        alert = iterm2.Alert(
+            "명령어 설명",
+            f"명령어: {command}\n\n{explanation}",
+            window_id
+        )
+        alert.add_button("확인")
+        await alert.async_run(self.connection)
+
+    async def _show_warning(
+        self,
+        window_id: Optional[str],
+        command: GeneratedCommand
+    ) -> bool:
+        """Show warning dialog for potentially dangerous commands."""
+        cmd_escaped = command.command.replace('"', '\\"')
+        reasons = ', '.join(command.risk_reasons)
+        apple_script = f'''
+display dialog "⚠️ 이 명령어는 주의가 필요합니다:\\n\\n{cmd_escaped}\\n\\n이유: {reasons}\\n\\n터미널에 삽입하시겠습니까?" with title "주의" buttons {{"취소", "삽입"}} default button "삽입"
+'''
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", apple_script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        return proc.returncode == 0
+
+    async def _show_dangerous_warning(
+        self,
+        window_id: Optional[str],
+        command: GeneratedCommand
+    ) -> bool:
+        """Show strong warning dialog for dangerous commands."""
+        cmd_escaped = command.command.replace('"', '\\"')
+        reasons = ', '.join(command.risk_reasons)
+        apple_script = f'''
+display dialog "🚨 이 명령어는 매우 위험합니다:\\n\\n{cmd_escaped}\\n\\n이유: {reasons}\\n\\n터미널에 삽입하시겠습니까?" with title "위험" buttons {{"취소", "삽입"}} default button "취소"
+'''
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", apple_script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        return proc.returncode == 0
+
+    async def send_to_terminal(self, session: iterm2.Session, command: str) -> None:
+        """Send command to terminal without executing."""
+        await session.async_send_text(command)
+
+    async def _show_alias_input(self, window_id: Optional[str]) -> Optional[str]:
+        """Show alias input dialog for saving command."""
+        apple_script = '''
+display dialog "명령어에 별칭을 지정하세요 (선택사항).\\n별칭으로 히스토리에서 빠르게 찾을 수 있습니다." default answer "" with title "별칭 지정" buttons {"취소", "확인"} default button "확인"
+'''
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", apple_script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            return None
+
+        output = stdout.decode("utf-8").strip()
+        if "text returned:" in output:
+            result = output.split("text returned:", 1)[1].strip()
+            return result if result else None
+        return None
+
+    async def _show_info(self, window_id: Optional[str], message: str) -> None:
+        """Show info message dialog."""
+        message_escaped = message.replace('"', '\\"').replace('\n', '\\n')
+        apple_script = f'''
+display dialog "{message_escaped}" with title "알림" buttons {{"확인"}} default button "확인"
+'''
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", apple_script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await proc.communicate()
+
+    async def _show_error(self, message: str) -> None:
+        """Show error message dialog."""
+        message_escaped = message.replace('"', '\\"').replace('\n', '\\n')
+        apple_script = f'''
+display dialog "{message_escaped}" with title "오류" buttons {{"확인"}} default button "확인" with icon stop
+'''
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", apple_script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await proc.communicate()
+
+    async def show_history_dialog(self, session: iterm2.Session) -> None:
+        """Show history selection dialog."""
+        window = self.app.current_terminal_window
+        window_id = window.window_id if window else None
+
+        history = self.history_manager.get_all()
+
+        if not history:
+            await self._show_info(window_id, "저장된 히스토리가 없습니다.")
+            return
+
+        # Build history list for display (max 10 items)
+        display_items = history[:10]
+        history_text = "최근 사용한 명령어:\\n\\n"
+        for i, item in enumerate(display_items, 1):
+            alias_text = f" [{item.alias}]" if item.alias else ""
+            # Escape quotes for AppleScript
+            cmd_escaped = item.command.replace('"', '\\"')
+            history_text += f"{i}. {cmd_escaped}{alias_text}\\n"
+
+        history_text += f"\\n번호를 입력하세요 (1-{len(display_items)})"
+
+        # Show selection dialog using native macOS dialog
+        apple_script = f'''
+display dialog "{history_text}" default answer "" with title "명령어 히스토리" buttons {{"취소", "확인"}} default button "확인"
+'''
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", apple_script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            return
+
+        output = stdout.decode("utf-8").strip()
+        result = None
+        if "text returned:" in output:
+            result = output.split("text returned:", 1)[1].strip()
+
+        if not result:
+            return
+
+        try:
+            index = int(result) - 1
+            if 0 <= index < len(display_items):
+                selected = display_items[index]
+                # Update usage count
+                self.history_manager.add(selected.prompt, selected.command, selected.alias)
+                await self.send_to_terminal(session, selected.command)
+            else:
+                await self._show_error("잘못된 번호입니다.")
+        except ValueError:
+            await self._show_error("숫자를 입력해주세요.")
+
+
+async def main(connection: iterm2.Connection) -> None:
+    """Main entry point."""
+    config_manager = ConfigManager()
+
+    # Initialize Gemini client (may have empty API key initially)
+    api_key = config_manager.get_api_key() or ""
+    gemini_client = GeminiClient(api_key) if api_key else None
+
+    # Create and run the generator
+    generator = AICommandGenerator(
+        connection,
+        config_manager,
+        gemini_client
+    )
+    await generator.run()
+
+
+iterm2.run_forever(main)
+EOF
+
+echo ""
+echo "설치가 완료되었습니다!"
+echo ""
+echo "사용 방법:"
+echo "  1. iTerm2를 재시작하세요"
+echo "  2. Ctrl+Shift+A: AI 명령어 생성"
+echo "  3. Ctrl+Shift+H: 히스토리 보기"
+echo ""
+echo "처음 실행 시 Google Gemini API 키가 필요합니다."
+echo "API 키는 https://aistudio.google.com/apikey 에서 발급받을 수 있습니다."
