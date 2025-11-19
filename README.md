@@ -20,30 +20,25 @@ iTerm2에서 자연어로 원하는 작업을 설명하면 AI가 적절한 쉘 �
 
 ### 설치 방법
 
-1. **의존성 설치**
-
-```bash
-pip3 install -r requirements.txt
-```
-
-2. **iTerm2 Python Runtime 설치**
+1. **iTerm2 Python Runtime 설치**
 
 iTerm2 > Scripts > Manage > Install Python Runtime
 
-3. **스크립트 설치**
+2. **설치 스크립트 실행**
 
 ```bash
-mkdir -p ~/Library/Application\ Support/iTerm2/Scripts/AutoLaunch
-cp src/ai_command_generator.py ~/Library/Application\ Support/iTerm2/Scripts/AutoLaunch/
+./install.sh
 ```
 
-4. **iTerm2 재시작**
+3. **iTerm2 재시작**
+
+처음 실행 시 Gemini API 키 입력 창이 나타납니다.
 
 ## 사용법
 
-1. `Ctrl+Shift+A`를 눌러 프롬프트 활성화
+1. `Ctrl+Shift+A`를 눌러 입력 창 활성화
 2. 원하는 작업을 자연어로 입력
-3. 생성된 명령어를 확인하고 실행/설명/저장 중 선택
+3. 생성된 명령어가 터미널에 자동 삽입됨 (위험 명령어는 경고 후 확인)
 
 ### 단축키
 
@@ -69,12 +64,11 @@ cp src/ai_command_generator.py ~/Library/Application\ Support/iTerm2/Scripts/Aut
 결과: find . -name "*.js" -not -path "*/node_modules/*"
 ```
 
-### 다이얼로그 버튼
+### 동작 방식
 
-- **실행**: 명령어를 터미널에 입력 (Enter는 직접 눌러야 함)
-- **설명**: 명령어의 각 부분에 대한 상세 설명 표시
-- **저장**: 명령어를 히스토리에 별칭과 함께 저장
-- **취소**: 작업 취소
+- **일반 명령어**: 확인 없이 터미널에 바로 삽입 (Enter는 직접 눌러야 함)
+- **위험 명령어**: 경고 다이얼로그 표시 후 삽입 여부 선택
+- **히스토리**: 모든 생성된 명령어는 자동으로 히스토리에 저장
 
 ## API 키 설정
 
@@ -111,7 +105,7 @@ pytest tests/
 
 ```bash
 # API 키 삭제 후 재설정
-python3 -c "import keyring; keyring.delete_password('iterm2-ai-generator', 'gemini-api-key')"
+security delete-generic-password -s "iterm2-ai-generator" -a "gemini-api-key"
 ```
 
 ### 단축키가 작동하지 않음
