@@ -220,8 +220,8 @@ display dialog "Google Gemini API 키를 입력하세요.\\n(https://aistudio.go
                     except Exception as e:
                         await self._show_error(f"오류 발생: {e}")
 
-                # Check for Ctrl+Shift+L (History List)
-                elif (keystroke.keycode == iterm2.Keycode.ANSI_L and
+                # Check for Ctrl+Shift+H (History)
+                elif (keystroke.keycode == iterm2.Keycode.ANSI_H and
                       iterm2.Modifier.CONTROL in keystroke.modifiers and
                       iterm2.Modifier.SHIFT in keystroke.modifiers):
 
@@ -537,7 +537,7 @@ echo ""
 echo "사용 방법:"
 echo "  1. iTerm2를 재시작하세요"
 echo "  2. Ctrl+Shift+A: AI 명령어 생성"
-echo "  3. Ctrl+Shift+L: 히스토리 보기"
+echo "  3. Ctrl+Shift+H: 히스토리 보기"
 echo ""
 echo "처음 실행 시 Google Gemini API 키가 필요합니다."
 echo "API 키는 https://aistudio.google.com/apikey 에서 발급받을 수 있습니다."

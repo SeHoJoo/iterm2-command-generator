@@ -43,7 +43,7 @@ iTerm2 > Scripts > Manage > Install Python Runtime
 ### 단축키
 
 - `Ctrl+Shift+A`: AI 명령어 생성
-- `Ctrl+Shift+L`: 히스토리 열기
+- `Ctrl+Shift+H`: 히스토리 열기
 
 ### 사용 예시
 
