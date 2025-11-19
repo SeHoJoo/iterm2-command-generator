@@ -1,5 +1,6 @@
 """Google Gemini API client for iTerm2 AI Command Generator."""
 
+import asyncio
 import google.generativeai as genai
 
 from exceptions import APIError, RateLimitError
@@ -56,7 +57,12 @@ class GeminiClient:
         prompt = self._build_generation_prompt(user_input, working_directory, shell_type)
 
         try:
-            response = self.model.generate_content(prompt)
+            # Run synchronous API call in thread executor to avoid blocking event loop
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.model.generate_content(prompt)
+            )
             command = self._parse_command_response(response.text)
 
             # Analyze risk
@@ -144,7 +150,12 @@ Provide:
 Keep the explanation concise but informative. Use simple language."""
 
         try:
-            response = self.model.generate_content(prompt)
+            # Run synchronous API call in thread executor to avoid blocking event loop
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.model.generate_content(prompt)
+            )
             return response.text.strip()
         except Exception as e:
             raise APIError(f"Failed to explain command: {e}")
