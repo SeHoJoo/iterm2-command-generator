@@ -460,16 +460,66 @@ display dialog "생성할 스크립트를 설명하세요.\\n예: 디렉토리 �
             await self._show_error(f"스크립트 생성 실패: {e}")
             return
 
-        # Copy script to clipboard
-        import subprocess
-        proc = subprocess.Popen(
-            ['pbcopy'],
-            stdin=subprocess.PIPE,
-            env={'LANG': 'en_US.UTF-8'}
+        # Ask user how to save the script
+        apple_script = '''
+tell application "iTerm"
+    activate
+    display dialog "스크립트가 생성되었습니다.\\n\\n저장 방식을 선택하세요:" with title "스크립트 저장" buttons {"취소", "클립보드에 복사", "파일로 저장"} default button "파일로 저장"
+end tell
+'''
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", apple_script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        proc.communicate(script.encode('utf-8'))
+        stdout, stderr = await proc.communicate()
 
-        await self._show_info(window_id, f"스크립트가 클립보드에 복사되었습니다.\\n\\n원하는 위치에 붙여넣기 하세요.")
+        if proc.returncode != 0:
+            return
+
+        result = stdout.decode("utf-8").strip()
+
+        if "클립보드에 복사" in result:
+            # Copy script to clipboard
+            import subprocess
+            proc = subprocess.Popen(
+                ['pbcopy'],
+                stdin=subprocess.PIPE,
+                env={'LANG': 'en_US.UTF-8'}
+            )
+            proc.communicate(script.encode('utf-8'))
+
+        elif "파일로 저장" in result:
+            # Ask for filename
+            apple_script = '''
+tell application "iTerm"
+    activate
+    display dialog "저장할 파일명을 입력하세요:" default answer "script.sh" with title "파일명 입력" buttons {"취소", "저장"} default button "저장"
+end tell
+'''
+            proc = await asyncio.create_subprocess_exec(
+                "osascript", "-e", apple_script,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+
+            if proc.returncode != 0:
+                return
+
+            output = stdout.decode("utf-8").strip()
+            if "text returned:" not in output:
+                return
+
+            filename = output.split("text returned:", 1)[1].strip()
+            if not filename:
+                filename = "script.sh"
+
+            # Encode script to base64 and send to terminal
+            import base64
+            encoded = base64.b64encode(script.encode('utf-8')).decode('ascii')
+            save_cmd = f"echo '{encoded}' | base64 -d > {filename} && chmod +x {filename}"
+            await session.async_send_text(save_cmd)
 
     async def show_input_dialog(self, window_id: Optional[str]) -> Optional[str]:
         """Show natural language input dialog using native macOS dialog."""
