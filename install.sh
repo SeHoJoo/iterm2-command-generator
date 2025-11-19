@@ -491,57 +491,6 @@ display dialog "원하는 작업을 자연어로 설명하세요.\\n예: 지난 
             return output.split("text returned:", 1)[1].strip()
         return None
 
-    async def show_command_dialog(
-        self,
-        window_id: Optional[str],
-        command: GeneratedCommand
-    ) -> str:
-        """Show generated command confirmation dialog."""
-        # Build subtitle with risk indicator
-        risk_indicator = ""
-        if command.risk_level == RiskLevel.WARNING:
-            risk_indicator = "⚠️ 주의: "
-        elif command.risk_level == RiskLevel.DANGEROUS:
-            risk_indicator = "🚨 위험: "
-
-        subtitle = f"{risk_indicator}생성된 명령어:\n\n{command.command}"
-
-        if command.risk_reasons:
-            subtitle += f"\n\n경고: {', '.join(command.risk_reasons)}"
-
-        alert = iterm2.Alert("명령어 확인", subtitle, window_id)
-        alert.add_button("실행")
-        alert.add_button("설명")
-        alert.add_button("저장")
-        alert.add_button("취소")
-
-        result = await alert.async_run(self.connection)
-
-        # Button indices: 1000=실행, 1001=설명, 1002=저장, 1003=취소
-        if result == 1000:
-            return "confirm"
-        elif result == 1001:
-            return "explain"
-        elif result == 1002:
-            return "save"
-        else:
-            return "cancel"
-
-    async def show_explanation_dialog(
-        self,
-        window_id: Optional[str],
-        command: str,
-        explanation: str
-    ) -> None:
-        """Show command explanation dialog."""
-        alert = iterm2.Alert(
-            "명령어 설명",
-            f"명령어: {command}\n\n{explanation}",
-            window_id
-        )
-        alert.add_button("확인")
-        await alert.async_run(self.connection)
-
     async def _show_warning(
         self,
         window_id: Optional[str],
