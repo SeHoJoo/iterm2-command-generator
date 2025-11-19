@@ -9,6 +9,7 @@ iTerm2에서 자연어로 원하는 작업을 설명하면 AI가 적절한 쉘 �
 - **위험 명령어 경고**: `rm -rf /` 같은 위험한 명령어에 대한 경고 표시
 - **히스토리 저장**: 자주 사용하는 명령어를 저장하고 재사용
 - **모델 선택**: 상황에 맞게 Gemini 모델 변경 가능
+- **사용자 지침**: 커스텀 지침을 저장하여 모든 프롬프트에 자동 적용
 
 ## 설치
 
@@ -44,9 +45,10 @@ iTerm2 > Scripts > Manage > Install Python Runtime
 ### 단축키
 
 - `Ctrl+Cmd+A`: AI 명령어 생성
-- `Ctrl+Cmd+S`: AI 스크립트 생성 (클립보드에 복사)
+- `Ctrl+Cmd+S`: AI 스크립트 생성 (클립보드에 복사 또는 파일 저장)
 - `Ctrl+Cmd+H`: 히스토리 열기
 - `Ctrl+Cmd+M`: 모델 변경
+- `Ctrl+Cmd+I`: 사용자 지침 설정
 
 ### 사용 가능한 모델
 
@@ -147,6 +149,7 @@ rm ~/.config/iterm2-ai-generator/config.json
 
 - 설정: `~/.config/iterm2-ai-generator/config.json`
 - 히스토리: `~/.config/iterm2-ai-generator/history.json`
+- 사용자 지침: `~/.config/iterm2-ai-generator/instructions.txt`
 - 로그: `~/.config/iterm2-ai-generator/debug.log`
 - API 키: macOS Keychain (iterm2-ai-generator)
 

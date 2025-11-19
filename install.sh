@@ -252,6 +252,16 @@ display dialog "Google Gemini API 키를 입력하세요.\\n(https://aistudio.go
                     except Exception as e:
                         await self._show_error(f"오류 발생: {e}")
 
+                # Check for Ctrl+Cmd+I (Instructions)
+                elif (keystroke.keycode == iterm2.Keycode.ANSI_I and
+                      iterm2.Modifier.CONTROL in keystroke.modifiers and
+                      iterm2.Modifier.COMMAND in keystroke.modifiers):
+
+                    try:
+                        asyncio.create_task(self.show_instructions_dialog())
+                    except Exception as e:
+                        await self._show_error(f"오류 발생: {e}")
+
     async def handle_shortcut(self, session: iterm2.Session) -> None:
         """Handle the activation shortcut."""
         # Get window ID for dialogs
@@ -289,13 +299,17 @@ display dialog "Google Gemini API 키를 입력하세요.\\n(https://aistudio.go
         # Start spinner
         spinner_task = asyncio.create_task(run_spinner())
 
+        # Get custom instructions
+        custom_instructions = self.config_manager.get_custom_instructions()
+
         # Generate command with timeout
         try:
             command = await asyncio.wait_for(
                 self.gemini_client.generate_command(
                     user_input,
                     working_directory,
-                    shell_type
+                    shell_type,
+                    custom_instructions
                 ),
                 timeout=30.0  # 30 second timeout
             )
@@ -419,12 +433,16 @@ display dialog "생성할 스크립트를 설명하세요.\\n예: 디렉토리 �
 
         spinner_task = asyncio.create_task(run_spinner())
 
+        # Get custom instructions
+        custom_instructions = self.config_manager.get_custom_instructions()
+
         try:
             script = await asyncio.wait_for(
                 self.gemini_client.generate_script(
                     user_input,
                     working_directory,
-                    shell_type
+                    shell_type,
+                    custom_instructions
                 ),
                 timeout=60.0  # 60 second timeout for scripts
             )
@@ -745,6 +763,29 @@ end tell
             if self.gemini_client:
                 self.gemini_client.set_model(selected_model)
                 await self._show_info(None, f"모델이 {selected_model}로 변경되었습니다.")
+
+    async def show_instructions_dialog(self) -> None:
+        """Show custom instructions dialog using TextEdit."""
+        # Get instructions file path
+        instructions_file = Path.home() / ".config" / "iterm2-ai-generator" / "instructions.txt"
+        instructions_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Create file if not exists
+        if not instructions_file.exists():
+            instructions_file.write_text("# AI에게 전달할 추가 지침을 입력하세요\\n# 예: 모든 명령어에 sudo 붙이기, 특정 경로 사용 등\\n", encoding='utf-8')
+
+        # Open with TextEdit
+        apple_script = f'''
+tell application "TextEdit"
+    activate
+    open POSIX file "{instructions_file}"
+end tell
+'''
+        await asyncio.create_subprocess_exec(
+            "osascript", "-e", apple_script,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
 
 
 async def main(connection: iterm2.Connection) -> None:

@@ -44,7 +44,8 @@ class GeminiClient:
         self,
         user_input: str,
         working_directory: str,
-        shell_type: str
+        shell_type: str,
+        custom_instructions: str = ""
     ) -> GeneratedCommand:
         """
         Generate shell command from natural language input.
@@ -65,7 +66,7 @@ class GeminiClient:
         if not user_input or len(user_input) > 500:
             raise ValueError("user_input must be 1-500 characters")
 
-        prompt = self._build_generation_prompt(user_input, working_directory, shell_type)
+        prompt = self._build_generation_prompt(user_input, working_directory, shell_type, custom_instructions)
 
         try:
             # Run synchronous API call in thread executor to avoid blocking event loop
@@ -96,16 +97,21 @@ class GeminiClient:
         self,
         user_input: str,
         working_directory: str,
-        shell_type: str
+        shell_type: str,
+        custom_instructions: str = ""
     ) -> str:
         """Build the prompt for command generation."""
+        instructions_section = ""
+        if custom_instructions:
+            instructions_section = f"\nUser Instructions: {custom_instructions}\n"
+
         return f"""You are a shell command expert. Generate a single shell command based on the user's request.
 
 Context:
 - Operating System: Linux
 - Shell: {shell_type}
 - Current Directory: {working_directory}
-
+{instructions_section}
 User Request: {user_input}
 
 Rules:
@@ -114,6 +120,7 @@ Rules:
 3. Command must be valid for Linux {shell_type}
 4. If the request is unclear, generate the most likely intended command
 5. Prefer common, well-known commands over obscure ones
+6. Follow user instructions if provided
 
 Command:"""
 
@@ -121,7 +128,8 @@ Command:"""
         self,
         user_input: str,
         working_directory: str,
-        shell_type: str
+        shell_type: str,
+        custom_instructions: str = ""
     ) -> str:
         """
         Generate a bash script from natural language.
@@ -130,6 +138,7 @@ Command:"""
             user_input: Natural language description of the script.
             working_directory: Current working directory.
             shell_type: Type of shell (bash, zsh, etc.)
+            custom_instructions: Optional custom instructions from user.
 
         Returns:
             Generated bash script as string.
@@ -137,13 +146,17 @@ Command:"""
         if not user_input or len(user_input) > 1000:
             raise ValueError("user_input must be 1-1000 characters")
 
+        instructions_section = ""
+        if custom_instructions:
+            instructions_section = f"\nUser Instructions: {custom_instructions}\n"
+
         prompt = f"""You are a bash script expert. Generate a complete bash script based on the user's request.
 
 Context:
 - Operating System: Linux
 - Shell: {shell_type}
 - Current Directory: {working_directory}
-
+{instructions_section}
 User Request: {user_input}
 
 Rules:
@@ -153,6 +166,7 @@ Rules:
 4. Include error handling where appropriate
 5. Script must be valid for Linux {shell_type}
 6. No markdown code blocks, just the raw script
+7. Follow user instructions if provided
 
 Script:"""
 

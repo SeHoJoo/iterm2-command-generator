@@ -140,3 +140,15 @@ class ConfigManager:
     def get_max_input_length(self) -> int:
         """Get maximum input length."""
         return self.config.max_input_length
+
+    def get_custom_instructions(self) -> str:
+        """Get custom instructions for prompts."""
+        instructions_file = Path(self.config_path).parent / "instructions.txt"
+        if instructions_file.exists():
+            return instructions_file.read_text(encoding='utf-8').strip()
+        return ""
+
+    def set_custom_instructions(self, instructions: str) -> None:
+        """Save custom instructions for prompts."""
+        instructions_file = Path(self.config_path).parent / "instructions.txt"
+        instructions_file.write_text(instructions, encoding='utf-8')
