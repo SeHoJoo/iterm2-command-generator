@@ -76,10 +76,38 @@ cat > "$PLUGIN_SCRIPT_DIR/__main__.py" << 'EOF'
 
 import asyncio
 import logging
+import signal
+import sys
+import os
 from typing import Optional
 from pathlib import Path
 
 import iterm2
+
+# Handle termination signals for clean shutdown
+def signal_handler(signum, frame):
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
+# Create PID file to prevent duplicate instances
+pid_file = Path.home() / ".config" / "iterm2-ai-generator" / "pid"
+pid_file.parent.mkdir(parents=True, exist_ok=True)
+
+# Check if another instance is running
+if pid_file.exists():
+    try:
+        old_pid = int(pid_file.read_text().strip())
+        # Check if process is still running
+        os.kill(old_pid, 0)
+        # Process exists, kill it
+        os.kill(old_pid, signal.SIGTERM)
+    except (ProcessLookupError, ValueError, PermissionError):
+        pass  # Process doesn't exist or can't be killed
+
+# Write current PID
+pid_file.write_text(str(os.getpid()))
 
 # Setup logging
 log_dir = Path.home() / ".config" / "iterm2-ai-generator"
@@ -100,6 +128,8 @@ from exceptions import APIError, KeychainError, RateLimitError
 from gemini_client import GeminiClient
 from history_manager import HistoryManager
 from models import GeneratedCommand, RiskLevel
+
+
 
 
 class AICommandGenerator:
@@ -424,7 +454,7 @@ display dialog "{message_escaped}" with title "오류" buttons {{"확인"}} defa
         await proc.communicate()
 
     async def show_history_dialog(self, session: iterm2.Session) -> None:
-        """Show history selection dialog."""
+        """Show history selection dialog using osascript choose from list."""
         window = self.app.current_terminal_window
         window_id = window.window_id if window else None
 
@@ -434,20 +464,26 @@ display dialog "{message_escaped}" with title "오류" buttons {{"확인"}} defa
             await self._show_info(window_id, "저장된 히스토리가 없습니다.")
             return
 
-        # Build history list for display (max 10 items)
-        display_items = history[:10]
-        history_text = "최근 사용한 명령어:\\n\\n"
-        for i, item in enumerate(display_items, 1):
+        # Build list items for choose from list
+        list_items = []
+        for i, item in enumerate(history, 1):
             alias_text = f" [{item.alias}]" if item.alias else ""
             # Escape quotes for AppleScript
-            cmd_escaped = item.command.replace('"', '\\"')
-            history_text += f"{i}. {cmd_escaped}{alias_text}\\n"
+            cmd_escaped = item.command.replace('\\\\', '\\\\\\\\').replace('"', '\\\\"')
+            list_items.append(f'{i}. {cmd_escaped}{alias_text}')
 
-        history_text += f"\\n번호를 입력하세요 (1-{len(display_items)})"
+        # Create AppleScript list string
+        items_str = '", "'.join(list_items)
 
-        # Show selection dialog using native macOS dialog
+        # Use choose from list for better UI with scrolling
         apple_script = f'''
-display dialog "{history_text}" default answer "" with title "명령어 히스토리" buttons {{"취소", "확인"}} default button "확인"
+set historyItems to {{"{items_str}"}}
+set selectedItem to choose from list historyItems with title "명령어 히스토리" with prompt "사용할 명령어를 선택하세요:" default items {{item 1 of historyItems}}
+if selectedItem is false then
+    return ""
+else
+    return item 1 of selectedItem
+end if
 '''
         proc = await asyncio.create_subprocess_exec(
             "osascript", "-e", apple_script,
@@ -459,25 +495,20 @@ display dialog "{history_text}" default answer "" with title "명령어 히스�
         if proc.returncode != 0:
             return
 
-        output = stdout.decode("utf-8").strip()
-        result = None
-        if "text returned:" in output:
-            result = output.split("text returned:", 1)[1].strip()
-
+        result = stdout.decode("utf-8").strip()
         if not result:
             return
 
+        # Extract index from result (e.g., "1. ls -la" -> 1)
         try:
-            index = int(result) - 1
-            if 0 <= index < len(display_items):
-                selected = display_items[index]
+            index = int(result.split(".")[0]) - 1
+            if 0 <= index < len(history):
+                selected = history[index]
                 # Update usage count
                 self.history_manager.add(selected.prompt, selected.command, selected.alias)
                 await self.send_to_terminal(session, selected.command)
-            else:
-                await self._show_error("잘못된 번호입니다.")
-        except ValueError:
-            await self._show_error("숫자를 입력해주세요.")
+        except (ValueError, IndexError):
+            pass
 
 
 async def main(connection: iterm2.Connection) -> None:
