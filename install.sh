@@ -655,13 +655,16 @@ display dialog "{message_escaped}" with title "오류" buttons {{"확인"}} defa
 
         # Use choose from list for better UI with scrolling
         apple_script = f'''
-set historyItems to {{"{items_str}"}}
-set selectedItem to choose from list historyItems with title "명령어 히스토리" with prompt "사용할 명령어를 선택하세요:" default items {{item 1 of historyItems}}
-if selectedItem is false then
-    return ""
-else
-    return item 1 of selectedItem
-end if
+tell application "iTerm"
+    activate
+    set historyItems to {{"{items_str}"}}
+    set selectedItem to choose from list historyItems with title "명령어 히스토리" with prompt "사용할 명령어를 선택하세요:" default items {{item 1 of historyItems}}
+    if selectedItem is false then
+        return ""
+    else
+        return item 1 of selectedItem
+    end if
+end tell
 '''
         proc = await asyncio.create_subprocess_exec(
             "osascript", "-e", apple_script,
@@ -710,13 +713,16 @@ end if
         items_str = '", "'.join(list_items)
 
         apple_script = f'''
-set modelItems to {{"{items_str}"}}
-set selectedItem to choose from list modelItems with title "모델 선택" with prompt "사용할 Gemini 모델을 선택하세요:" default items {{item 1 of modelItems}}
-if selectedItem is false then
-    return ""
-else
-    return item 1 of selectedItem
-end if
+tell application "iTerm"
+    activate
+    set modelItems to {{"{items_str}"}}
+    set selectedItem to choose from list modelItems with title "모델 선택" with prompt "사용할 Gemini 모델을 선택하세요:" default items {{item 1 of modelItems}}
+    if selectedItem is false then
+        return ""
+    else
+        return item 1 of selectedItem
+    end if
+end tell
 '''
         proc = await asyncio.create_subprocess_exec(
             "osascript", "-e", apple_script,
