@@ -36,14 +36,16 @@ iTerm2 > Scripts > Manage > Install Python Runtime
 
 ## 사용법
 
-1. `Ctrl+Shift+A`를 눌러 입력 창 활성화
+1. `Ctrl+Cmd+A`를 눌러 입력 창 활성화
 2. 원하는 작업을 자연어로 입력
 3. 생성된 명령어가 터미널에 자동 삽입됨 (위험 명령어는 경고 후 확인)
 
 ### 단축키
 
-- `Ctrl+Shift+A`: AI 명령어 생성
-- `Ctrl+Shift+H`: 히스토리 열기
+- `Ctrl+Cmd+A`: AI 명령어 생성
+- `Ctrl+Cmd+S`: AI 스크립트 생성
+- `Ctrl+Cmd+H`: 히스토리 열기
+- `Ctrl+Cmd+M`: 모델 변경
 
 ### 사용 예시
 

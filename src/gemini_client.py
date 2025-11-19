@@ -26,8 +26,19 @@ class GeminiClient:
 
         self.api_key = api_key
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        self.model_name = 'gemini-2.5-flash-lite'
+        self.model = genai.GenerativeModel(self.model_name)
         self.risk_detector = RiskDetector()
+
+    def set_model(self, model_name: str) -> None:
+        """
+        Change the Gemini model.
+
+        Args:
+            model_name: Name of the model to use.
+        """
+        self.model_name = model_name
+        self.model = genai.GenerativeModel(model_name)
 
     async def generate_command(
         self,
@@ -91,7 +102,7 @@ class GeminiClient:
         return f"""You are a shell command expert. Generate a single shell command based on the user's request.
 
 Context:
-- Operating System: macOS
+- Operating System: Linux
 - Shell: {shell_type}
 - Current Directory: {working_directory}
 
@@ -100,11 +111,78 @@ User Request: {user_input}
 Rules:
 1. Return ONLY the shell command, nothing else
 2. No explanations, no markdown, no code blocks
-3. Command must be valid for macOS {shell_type}
+3. Command must be valid for Linux {shell_type}
 4. If the request is unclear, generate the most likely intended command
 5. Prefer common, well-known commands over obscure ones
 
 Command:"""
+
+    async def generate_script(
+        self,
+        user_input: str,
+        working_directory: str,
+        shell_type: str
+    ) -> str:
+        """
+        Generate a bash script from natural language.
+
+        Args:
+            user_input: Natural language description of the script.
+            working_directory: Current working directory.
+            shell_type: Type of shell (bash, zsh, etc.)
+
+        Returns:
+            Generated bash script as string.
+        """
+        if not user_input or len(user_input) > 1000:
+            raise ValueError("user_input must be 1-1000 characters")
+
+        prompt = f"""You are a bash script expert. Generate a complete bash script based on the user's request.
+
+Context:
+- Operating System: Linux
+- Shell: {shell_type}
+- Current Directory: {working_directory}
+
+User Request: {user_input}
+
+Rules:
+1. Return ONLY the bash script, nothing else
+2. Include proper shebang (#!/bin/bash)
+3. Add comments to explain each section
+4. Include error handling where appropriate
+5. Script must be valid for Linux {shell_type}
+6. No markdown code blocks, just the raw script
+
+Script:"""
+
+        try:
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.model.generate_content(prompt)
+            )
+            return self._parse_script_response(response.text)
+
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "quota" in error_msg or "rate" in error_msg or "limit" in error_msg:
+                raise RateLimitError(f"API rate limit exceeded: {e}")
+            raise APIError(f"Failed to generate script: {e}")
+
+    def _parse_script_response(self, response_text: str) -> str:
+        """Parse and clean the script response."""
+        script = response_text.strip()
+        # Remove markdown code blocks if present
+        if script.startswith("```"):
+            lines = script.split("\n")
+            # Remove first line (```bash) and last line (```)
+            if lines[-1].strip() == "```":
+                lines = lines[1:-1]
+            else:
+                lines = lines[1:]
+            script = "\n".join(lines)
+        return script.strip()
 
     def _parse_command_response(self, response_text: str) -> str:
         """Parse and clean the API response."""

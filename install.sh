@@ -208,10 +208,10 @@ display dialog "Google Gemini API 키를 입력하세요.\\n(https://aistudio.go
             while True:
                 keystroke = await mon.async_get()
 
-                # Check for Ctrl+Shift+A (AI command generation)
+                # Check for Ctrl+Cmd+A (AI command generation)
                 if (keystroke.keycode == iterm2.Keycode.ANSI_A and
                     iterm2.Modifier.CONTROL in keystroke.modifiers and
-                    iterm2.Modifier.SHIFT in keystroke.modifiers):
+                    iterm2.Modifier.COMMAND in keystroke.modifiers):
 
                     try:
                         session = self.app.current_terminal_window.current_tab.current_session
@@ -220,14 +220,35 @@ display dialog "Google Gemini API 키를 입력하세요.\\n(https://aistudio.go
                     except Exception as e:
                         await self._show_error(f"오류 발생: {e}")
 
-                # Check for Ctrl+Shift+H (History)
+                # Check for Ctrl+Cmd+H (History)
                 elif (keystroke.keycode == iterm2.Keycode.ANSI_H and
                       iterm2.Modifier.CONTROL in keystroke.modifiers and
-                      iterm2.Modifier.SHIFT in keystroke.modifiers):
+                      iterm2.Modifier.COMMAND in keystroke.modifiers):
 
                     try:
                         session = self.app.current_terminal_window.current_tab.current_session
                         asyncio.create_task(self.show_history_dialog(session))
+                    except Exception as e:
+                        await self._show_error(f"오류 발생: {e}")
+
+                # Check for Ctrl+Cmd+M (Model selection)
+                elif (keystroke.keycode == iterm2.Keycode.ANSI_M and
+                      iterm2.Modifier.CONTROL in keystroke.modifiers and
+                      iterm2.Modifier.COMMAND in keystroke.modifiers):
+
+                    try:
+                        asyncio.create_task(self.show_model_selection())
+                    except Exception as e:
+                        await self._show_error(f"오류 발생: {e}")
+
+                # Check for Ctrl+Cmd+S (Script generation)
+                elif (keystroke.keycode == iterm2.Keycode.ANSI_S and
+                      iterm2.Modifier.CONTROL in keystroke.modifiers and
+                      iterm2.Modifier.COMMAND in keystroke.modifiers):
+
+                    try:
+                        session = self.app.current_terminal_window.current_tab.current_session
+                        asyncio.create_task(self.handle_script_shortcut(session))
                     except Exception as e:
                         await self._show_error(f"오류 발생: {e}")
 
@@ -253,6 +274,21 @@ display dialog "Google Gemini API 키를 입력하세요.\\n(https://aistudio.go
         if "/" in shell_type:
             shell_type = shell_type.split("/")[-1]
 
+        # Spinner animation task
+        spinner_running = True
+        async def run_spinner():
+            spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+            idx = 0
+            while spinner_running:
+                char = spinner_chars[idx % len(spinner_chars)]
+                # Clear line and show spinner
+                await session.async_send_text("\x15" + char)
+                idx += 1
+                await asyncio.sleep(0.1)
+
+        # Start spinner
+        spinner_task = asyncio.create_task(run_spinner())
+
         # Generate command with timeout
         try:
             command = await asyncio.wait_for(
@@ -264,19 +300,60 @@ display dialog "Google Gemini API 키를 입력하세요.\\n(https://aistudio.go
                 timeout=30.0  # 30 second timeout
             )
             logger.info(f"명령어 생성 완료: {command.command}")
+
+            # Stop spinner and clear line
+            spinner_running = False
+            spinner_task.cancel()
+            try:
+                await spinner_task
+            except asyncio.CancelledError:
+                pass
+            await session.async_send_text("\x15")
         except asyncio.TimeoutError:
+            # Stop spinner and clear line
+            spinner_running = False
+            spinner_task.cancel()
+            try:
+                await spinner_task
+            except asyncio.CancelledError:
+                pass
+            await session.async_send_text("\x15")
             logger.error("API 타임아웃")
-            await self._show_error("명령어 생성 시간이 초과되었습니다.\n다시 시도해주세요.")
+            await self._show_error("명령어 생성 시간이 초과되었습니다.\\n\\nCtrl+Cmd+M으로 더 빠른 모델로 변경해보세요.")
             return
         except RateLimitError as e:
+            # Stop spinner and clear line
+            spinner_running = False
+            spinner_task.cancel()
+            try:
+                await spinner_task
+            except asyncio.CancelledError:
+                pass
+            await session.async_send_text("\x15")
             logger.error(f"API 한도 초과: {e}")
             await self._show_error(f"API 한도 초과: {e}\n잠시 후 다시 시도해주세요.")
             return
         except APIError as e:
+            # Stop spinner and clear line
+            spinner_running = False
+            spinner_task.cancel()
+            try:
+                await spinner_task
+            except asyncio.CancelledError:
+                pass
+            await session.async_send_text("\x15")
             logger.error(f"API 오류: {e}")
             await self._show_error(f"명령어 생성 실패: {e}")
             return
         except Exception as e:
+            # Stop spinner and clear line
+            spinner_running = False
+            spinner_task.cancel()
+            try:
+                await spinner_task
+            except asyncio.CancelledError:
+                pass
+            await session.async_send_text("\x15")
             logger.exception(f"예상치 못한 오류: {e}")
             await self._show_error(f"오류 발생: {e}")
             return
@@ -292,6 +369,107 @@ display dialog "Google Gemini API 키를 입력하세요.\\n(https://aistudio.go
         # Save to history and send to terminal directly (no confirmation popup)
         self.history_manager.add(user_input, command.command)
         await self.send_to_terminal(session, command.command)
+
+    async def handle_script_shortcut(self, session: iterm2.Session) -> None:
+        """Handle the script generation shortcut."""
+        window = self.app.current_terminal_window
+        window_id = window.window_id if window else None
+
+        # Show input dialog for script description
+        apple_script = '''
+display dialog "생성할 스크립트를 설명하세요.\\n예: 디렉토리 백업 스크립트" default answer "" with title "AI 스크립트 생성" buttons {"취소", "확인"} default button "확인"
+'''
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", apple_script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            return
+
+        output = stdout.decode("utf-8").strip()
+        user_input = None
+        if "text returned:" in output:
+            user_input = output.split("text returned:", 1)[1].strip()
+
+        if not user_input:
+            return
+
+        logger.info(f"스크립트 생성 요청: {user_input[:50]}...")
+
+        # Get context
+        working_directory = await session.async_get_variable("path") or "~"
+        shell_type = await session.async_get_variable("shell") or "bash"
+
+        if "/" in shell_type:
+            shell_type = shell_type.split("/")[-1]
+
+        # Spinner animation
+        spinner_running = True
+        async def run_spinner():
+            spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+            idx = 0
+            while spinner_running:
+                char = spinner_chars[idx % len(spinner_chars)]
+                await session.async_send_text("\x15" + char)
+                idx += 1
+                await asyncio.sleep(0.1)
+
+        spinner_task = asyncio.create_task(run_spinner())
+
+        try:
+            script = await asyncio.wait_for(
+                self.gemini_client.generate_script(
+                    user_input,
+                    working_directory,
+                    shell_type
+                ),
+                timeout=60.0  # 60 second timeout for scripts
+            )
+            logger.info(f"스크립트 생성 완료")
+
+            # Stop spinner
+            spinner_running = False
+            spinner_task.cancel()
+            try:
+                await spinner_task
+            except asyncio.CancelledError:
+                pass
+            await session.async_send_text("\x15")
+
+        except asyncio.TimeoutError:
+            spinner_running = False
+            spinner_task.cancel()
+            try:
+                await spinner_task
+            except asyncio.CancelledError:
+                pass
+            await session.async_send_text("\x15")
+            await self._show_error("스크립트 생성 시간이 초과되었습니다.\\n\\nCtrl+Cmd+M으로 더 빠른 모델로 변경해보세요.")
+            return
+        except Exception as e:
+            spinner_running = False
+            spinner_task.cancel()
+            try:
+                await spinner_task
+            except asyncio.CancelledError:
+                pass
+            await session.async_send_text("\x15")
+            await self._show_error(f"스크립트 생성 실패: {e}")
+            return
+
+        # Copy script to clipboard
+        import subprocess
+        proc = subprocess.Popen(
+            ['pbcopy'],
+            stdin=subprocess.PIPE,
+            env={'LANG': 'en_US.UTF-8'}
+        )
+        proc.communicate(script.encode('utf-8'))
+
+        await self._show_info(window_id, f"스크립트가 클립보드에 복사되었습니다.\\n\\n원하는 위치에 붙여넣기 하세요.")
 
     async def show_input_dialog(self, window_id: Optional[str]) -> Optional[str]:
         """Show natural language input dialog using native macOS dialog."""
@@ -510,6 +688,59 @@ end if
         except (ValueError, IndexError):
             pass
 
+    async def show_model_selection(self) -> None:
+        """Show model selection dialog."""
+        models = [
+            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash",
+            "gemini-2.5-pro",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite"
+        ]
+
+        # Get current model
+        current_model = self.gemini_client.model_name if self.gemini_client else "gemini-2.5-flash"
+
+        # Build list with current marker
+        list_items = []
+        for model in models:
+            marker = " (현재)" if model == current_model else ""
+            list_items.append(f"{model}{marker}")
+
+        items_str = '", "'.join(list_items)
+
+        apple_script = f'''
+set modelItems to {{"{items_str}"}}
+set selectedItem to choose from list modelItems with title "모델 선택" with prompt "사용할 Gemini 모델을 선택하세요:" default items {{item 1 of modelItems}}
+if selectedItem is false then
+    return ""
+else
+    return item 1 of selectedItem
+end if
+'''
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", apple_script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            return
+
+        result = stdout.decode("utf-8").strip()
+        if not result:
+            return
+
+        # Extract model name (remove " (현재)" suffix if present)
+        selected_model = result.replace(" (현재)", "").strip()
+
+        if selected_model and selected_model != current_model:
+            # Update model in GeminiClient
+            if self.gemini_client:
+                self.gemini_client.set_model(selected_model)
+                await self._show_info(None, f"모델이 {selected_model}로 변경되었습니다.")
+
 
 async def main(connection: iterm2.Connection) -> None:
     """Main entry point."""
@@ -536,8 +767,10 @@ echo "설치가 완료되었습니다!"
 echo ""
 echo "사용 방법:"
 echo "  1. iTerm2를 재시작하세요"
-echo "  2. Ctrl+Shift+A: AI 명령어 생성"
-echo "  3. Ctrl+Shift+H: 히스토리 보기"
+echo "  2. Ctrl+Cmd+A: AI 명령어 생성"
+echo "  3. Ctrl+Cmd+S: AI 스크립트 생성"
+echo "  4. Ctrl+Cmd+H: 히스토리 보기"
+echo "  5. Ctrl+Cmd+M: 모델 변경"
 echo ""
 echo "처음 실행 시 Google Gemini API 키가 필요합니다."
 echo "API 키는 https://aistudio.google.com/apikey 에서 발급받을 수 있습니다."
