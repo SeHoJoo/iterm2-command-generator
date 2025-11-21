@@ -762,7 +762,6 @@ end tell
             # Update model in GeminiClient
             if self.gemini_client:
                 self.gemini_client.set_model(selected_model)
-                await self._show_info(None, f"모델이 {selected_model}로 변경되었습니다.")
 
     async def show_instructions_dialog(self) -> None:
         """Show custom instructions dialog using TextEdit."""

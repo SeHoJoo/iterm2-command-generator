@@ -123,9 +123,42 @@ security delete-generic-password -s "iterm2-ai-generator" -a "gemini-api-key"
 
 ### 단축키가 작동하지 않음
 
+**1. 스크립트 콘솔에서 오류 확인**
+
+```
+iTerm2 > Scripts > Manage > Console
+```
+
+로그가 없다면 플러그인이 로드되지 않은 것입니다.
+
+**2. 수동으로 스크립트 실행하여 테스트**
+
+```
+iTerm2 > Scripts > AutoLaunch > ai_command_generator.py > __main__.py
+```
+
+클릭 후 Console에서 오류 메시지를 확인하세요.
+
+**3. ModuleNotFoundError: No module named 'keyring' 오류**
+
+`pip3 list`에서 모듈이 보이지만 import 오류가 발생하는 경우:
+
+```bash
+# iTerm2가 사용하는 Python 경로 찾기
+find ~/.config/iterm2/AppSupport/iterm2env -name "python3" -type f 2>/dev/null | head -1
+
+# 해당 Python으로 직접 설치 (예시)
+/Users/YOUR_USERNAME/.config/iterm2/AppSupport/iterm2env/versions/3.14.0/bin/python3 -m pip install keyring google-generativeai iterm2
+
+# 설치 확인
+/Users/YOUR_USERNAME/.config/iterm2/AppSupport/iterm2env/versions/3.14.0/bin/python3 -c "import keyring; print('OK')"
+```
+
+**4. 기타 확인 사항**
+
 1. iTerm2 설정에서 키보드 단축키 충돌 확인
 2. 다른 앱에서 동일한 단축키 사용 여부 확인
-3. iTerm2 재시작
+3. iTerm2 완전 재시작 (Cmd+Q 후 다시 실행)
 
 ### Rate Limit 오류
 
