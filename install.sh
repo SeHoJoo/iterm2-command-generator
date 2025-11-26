@@ -390,51 +390,45 @@ display dialog "Enter your Google Gemini API key.\\n(Get one at https://aistudio
         window = self.app.current_terminal_window
         window_id = window.window_id if window else None
 
-        # Use PyObjC custom NSWindow with NSTextView for multi-line input
+        # Use PyObjC custom NSPanel with NSTextView for multi-line input (always on top)
         pyobjc_script = '''#!/usr/bin/env python3
 import sys
 import objc
-from AppKit import (NSApplication, NSApp, NSWindow, NSScrollView, NSTextView,
-                    NSButton, NSTextField, NSApplicationActivationPolicyRegular,
+from AppKit import (NSApplication, NSApp, NSPanel, NSScrollView, NSTextView,
+                    NSButton, NSTextField, NSApplicationActivationPolicyAccessory,
                     NSMakeRect, NSBezelBorder, NSBackingStoreBuffered,
-                    NSWindowStyleMaskTitled, NSWindowStyleMaskClosable, NSRoundedBezelStyle,
-                    NSMenu, NSMenuItem, NSFont)
+                    NSWindowStyleMaskTitled, NSWindowStyleMaskClosable,
+                    NSWindowStyleMaskNonactivatingPanel,
+                    NSRoundedBezelStyle, NSMenu, NSMenuItem, NSFont)
 from Foundation import NSObject
 
 NSApplication.sharedApplication()
-NSApp.setActivationPolicy_(NSApplicationActivationPolicyRegular)
-NSApp.activateIgnoringOtherApps_(True)
+NSApp.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 
 # Create menu bar with Edit menu for copy/paste
 mainMenu = NSMenu.alloc().init()
-appMenu = NSMenu.alloc().init()
-appMenuItem = NSMenuItem.alloc().init()
-appMenuItem.setSubmenu_(appMenu)
-mainMenu.addItem_(appMenuItem)
-
 editMenu = NSMenu.alloc().initWithTitle_("Edit")
 editMenu.addItemWithTitle_action_keyEquivalent_("Undo", "undo:", "z")
-editMenu.addItemWithTitle_action_keyEquivalent_("Redo", "redo:", "Z")
-editMenu.addItem_(NSMenuItem.separatorItem())
 editMenu.addItemWithTitle_action_keyEquivalent_("Cut", "cut:", "x")
 editMenu.addItemWithTitle_action_keyEquivalent_("Copy", "copy:", "c")
 editMenu.addItemWithTitle_action_keyEquivalent_("Paste", "paste:", "v")
 editMenu.addItemWithTitle_action_keyEquivalent_("Select All", "selectAll:", "a")
-
 editMenuItem = NSMenuItem.alloc().init()
 editMenuItem.setSubmenu_(editMenu)
-editMenuItem.setTitle_("Edit")
 mainMenu.addItem_(editMenuItem)
 NSApp.setMainMenu_(mainMenu)
 
-# Create window
-window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+# Create non-activating panel (stays on top of other apps)
+window = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
     NSMakeRect(0, 0, 450, 250),
-    NSWindowStyleMaskTitled | NSWindowStyleMaskClosable,
+    NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskNonactivatingPanel,
     NSBackingStoreBuffered,
     False
 )
 window.setTitle_("AI Script Generator")
+window.setFloatingPanel_(True)
+window.setHidesOnDeactivate_(False)
+window.setLevel_(101)  # NSPopUpMenuWindowLevel - stays on top
 window.center()
 
 result = {"text": None, "confirmed": False}
@@ -498,7 +492,6 @@ window.contentView().addSubview_(cancelBtn)
 # Show window and focus
 window.makeKeyAndOrderFront_(None)
 window.makeFirstResponder_(textView)
-window.setLevel_(3)
 
 NSApp.runModalForWindow_(window)
 window.close()

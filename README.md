@@ -12,7 +12,11 @@ iTerm2에서 자연어로 원하는 작업을 설명하면 AI가 적절한 쉘 �
 
 ## Demo
 
-![Demo](assets/commands.gif)
+### Command Generation / 명령어 생성
+![Command Demo](assets/commands.gif)
+
+### Script Generation / 스크립트 생성
+![Script Demo](assets/scripts.gif)
 
 ## Features / 기능
 
