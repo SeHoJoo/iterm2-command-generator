@@ -8,24 +8,24 @@ SCRIPT_NAME="ai_command_generator.py"
 PLUGIN_DIR="$HOME/.config/iterm2/AppSupport/Scripts/AutoLaunch"
 ITERM2_ENV_DIR="$HOME/.config/iterm2/AppSupport/iterm2env"
 
-echo "iTerm2 AI Command Generator 설치를 시작합니다..."
+echo "Installing iTerm2 AI Command Generator..."
 
 # Check if iTerm2 is installed
 if [ ! -d "/Applications/iTerm.app" ]; then
-    echo "오류: iTerm2가 설치되어 있지 않습니다."
-    echo "https://iterm2.com 에서 iTerm2를 먼저 설치해주세요."
+    echo "Error: iTerm2 is not installed."
+    echo "Please install iTerm2 from https://iterm2.com first."
     exit 1
 fi
 
 # Check if iTerm2 Python Runtime is installed
 if [ ! -d "$ITERM2_ENV_DIR" ]; then
     echo ""
-    echo "오류: iTerm2 Python Runtime이 설치되어 있지 않습니다."
+    echo "Error: iTerm2 Python Runtime is not installed."
     echo ""
-    echo "다음 단계를 따라 설치해주세요:"
-    echo "  1. iTerm2 실행"
+    echo "Please follow these steps to install:"
+    echo "  1. Open iTerm2"
     echo "  2. Scripts > Manage > Install Python Runtime"
-    echo "  3. 설치 완료 후 이 스크립트를 다시 실행"
+    echo "  3. Run this script again after installation"
     echo ""
     exit 1
 fi
@@ -34,24 +34,24 @@ fi
 ITERM2_PIP=$(find "$ITERM2_ENV_DIR" -name "pip3" -type f 2>/dev/null | head -1)
 
 if [ -z "$ITERM2_PIP" ]; then
-    echo "오류: iTerm2 Python Runtime의 pip를 찾을 수 없습니다."
+    echo "Error: Cannot find pip in iTerm2 Python Runtime."
     exit 1
 fi
 
-echo "iTerm2 Python Runtime을 찾았습니다: $ITERM2_PIP"
+echo "Found iTerm2 Python Runtime: $ITERM2_PIP"
 
 # Create AutoLaunch directory if it doesn't exist
 if [ ! -d "$PLUGIN_DIR" ]; then
-    echo "AutoLaunch 디렉토리를 생성합니다..."
+    echo "Creating AutoLaunch directory..."
     mkdir -p "$PLUGIN_DIR"
 fi
 
 # Install Python dependencies using iTerm2's pip
-echo "Python 의존성을 설치합니다..."
+echo "Installing Python dependencies..."
 "$ITERM2_PIP" install -r requirements.txt
 
 # Copy script to AutoLaunch folder
-echo "플러그인을 설치합니다..."
+echo "Installing plugin..."
 
 # Remove old installation if exists
 rm -rf "$PLUGIN_DIR/ai_command_generator"
@@ -813,14 +813,14 @@ iterm2.run_forever(main)
 EOF
 
 echo ""
-echo "설치가 완료되었습니다!"
+echo "Installation complete!"
 echo ""
-echo "사용 방법:"
-echo "  1. iTerm2를 재시작하세요"
-echo "  2. Ctrl+Cmd+A: AI 명령어 생성"
-echo "  3. Ctrl+Cmd+S: AI 스크립트 생성"
-echo "  4. Ctrl+Cmd+H: 히스토리 보기"
-echo "  5. Ctrl+Cmd+M: 모델 변경"
+echo "Usage:"
+echo "  1. Restart iTerm2"
+echo "  2. Ctrl+Cmd+A: Generate command"
+echo "  3. Ctrl+Cmd+S: Generate script"
+echo "  4. Ctrl+Cmd+H: Open history"
+echo "  5. Ctrl+Cmd+M: Change model"
 echo ""
-echo "처음 실행 시 Google Gemini API 키가 필요합니다."
-echo "API 키는 https://aistudio.google.com/apikey 에서 발급받을 수 있습니다."
+echo "You will need a Google Gemini API key on first run."
+echo "Get your API key at https://aistudio.google.com/apikey"
