@@ -63,8 +63,8 @@ class GeminiClient:
             APIError: If API call fails.
             RateLimitError: If API rate limit exceeded.
         """
-        if not user_input or len(user_input) > 500:
-            raise ValueError("user_input must be 1-500 characters")
+        if not user_input or len(user_input) > 10000:
+            raise ValueError("user_input must be 1-10000 characters")
 
         prompt = self._build_generation_prompt(user_input, working_directory, shell_type, custom_instructions)
 
@@ -143,8 +143,8 @@ Command:"""
         Returns:
             Generated bash script as string.
         """
-        if not user_input or len(user_input) > 1000:
-            raise ValueError("user_input must be 1-1000 characters")
+        if not user_input or len(user_input) > 50000:
+            raise ValueError("user_input must be 1-50000 characters")
 
         instructions_section = ""
         if custom_instructions:

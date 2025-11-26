@@ -398,12 +398,12 @@ from AppKit import (NSApplication, NSApp, NSPanel, NSScrollView, NSTextView,
                     NSButton, NSTextField, NSApplicationActivationPolicyAccessory,
                     NSMakeRect, NSBezelBorder, NSBackingStoreBuffered,
                     NSWindowStyleMaskTitled, NSWindowStyleMaskClosable,
-                    NSWindowStyleMaskNonactivatingPanel,
                     NSRoundedBezelStyle, NSMenu, NSMenuItem, NSFont)
 from Foundation import NSObject
 
 NSApplication.sharedApplication()
 NSApp.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+NSApp.activateIgnoringOtherApps_(True)
 
 # Create menu bar with Edit menu for copy/paste
 mainMenu = NSMenu.alloc().init()
@@ -418,10 +418,10 @@ editMenuItem.setSubmenu_(editMenu)
 mainMenu.addItem_(editMenuItem)
 NSApp.setMainMenu_(mainMenu)
 
-# Create non-activating panel (stays on top of other apps)
+# Create floating panel (stays on top, supports Korean IME)
 window = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
     NSMakeRect(0, 0, 450, 250),
-    NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskNonactivatingPanel,
+    NSWindowStyleMaskTitled | NSWindowStyleMaskClosable,
     NSBackingStoreBuffered,
     False
 )
