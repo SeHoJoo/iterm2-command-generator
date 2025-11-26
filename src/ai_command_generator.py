@@ -203,9 +203,9 @@ class AICommandGenerator:
             User input or None if cancelled.
         """
         alert = iterm2.TextInputAlert(
-            "AI 명령어 생성",
-            "원하는 작업을 자연어로 설명하세요.",
-            "예: 지난 7일간 수정된 파일 찾기",
+            "AI Command Generator",
+            "Describe what you want to do in natural language.",
+            "Ex: Find files modified in the last 7 days",
             "",
             window_id
         )
