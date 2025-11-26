@@ -10,6 +10,10 @@ An iTerm2 plugin that generates shell commands from natural language description
 
 iTerm2에서 자연어로 원하는 작업을 설명하면 AI가 적절한 쉘 명령어를 생성해주는 플러그인입니다.
 
+## Demo
+
+![Demo](assets/commands.gif)
+
 ## Features / 기능
 
 - **Natural Language → Command**: "Find files modified in the last 7 days" → `find . -mtime -7`
