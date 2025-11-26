@@ -386,27 +386,138 @@ display dialog "Enter your Google Gemini API key.\\n(Get one at https://aistudio
 
     async def handle_script_shortcut(self, session: iterm2.Session) -> None:
         """Handle the script generation shortcut."""
+        import tempfile
         window = self.app.current_terminal_window
         window_id = window.window_id if window else None
 
-        # Show input dialog for script description
-        apple_script = '''
-display dialog "Describe the script you want to generate.\\nEx: Directory backup script" default answer "" with title "AI Script Generator" buttons {"Cancel", "OK"} default button "OK" cancel button "Cancel"
-'''
-        proc = await asyncio.create_subprocess_exec(
-            "osascript", "-e", apple_script,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
+        # Use PyObjC custom NSWindow with NSTextView for multi-line input
+        pyobjc_script = '''#!/usr/bin/env python3
+import sys
+import objc
+from AppKit import (NSApplication, NSApp, NSWindow, NSScrollView, NSTextView,
+                    NSButton, NSTextField, NSApplicationActivationPolicyRegular,
+                    NSMakeRect, NSBezelBorder, NSBackingStoreBuffered,
+                    NSWindowStyleMaskTitled, NSWindowStyleMaskClosable, NSRoundedBezelStyle)
+from Foundation import NSObject
 
-        if proc.returncode != 0:
+NSApplication.sharedApplication()
+NSApp.setActivationPolicy_(NSApplicationActivationPolicyRegular)
+NSApp.activateIgnoringOtherApps_(True)
+
+# Create window
+window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+    NSMakeRect(0, 0, 450, 250),
+    NSWindowStyleMaskTitled | NSWindowStyleMaskClosable,
+    NSBackingStoreBuffered,
+    False
+)
+window.setTitle_("AI Script Generator")
+window.center()
+
+result = {"text": None, "confirmed": False}
+
+# Label
+label = NSTextField.alloc().initWithFrame_(NSMakeRect(20, 200, 410, 20))
+label.setStringValue_("Describe the script you want to generate:")
+label.setBezeled_(False)
+label.setDrawsBackground_(False)
+label.setEditable_(False)
+label.setSelectable_(False)
+window.contentView().addSubview_(label)
+
+# ScrollView + TextView
+scrollView = NSScrollView.alloc().initWithFrame_(NSMakeRect(20, 60, 410, 130))
+scrollView.setBorderType_(NSBezelBorder)
+scrollView.setHasVerticalScroller_(True)
+
+textView = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, 390, 130))
+textView.setMinSize_(NSMakeRect(0, 0, 390, 130).size)
+textView.setMaxSize_(NSMakeRect(0, 0, 10000, 10000).size)
+textView.setVerticallyResizable_(True)
+textView.textContainer().setWidthTracksTextView_(True)
+
+scrollView.setDocumentView_(textView)
+window.contentView().addSubview_(scrollView)
+
+# Button handler
+class ButtonHandler(NSObject):
+    def onOK_(self, sender):
+        result["text"] = textView.string()
+        result["confirmed"] = True
+        NSApp.stopModal()
+
+    def onCancel_(self, sender):
+        NSApp.stopModal()
+
+handler = ButtonHandler.alloc().init()
+
+# OK Button
+okBtn = NSButton.alloc().initWithFrame_(NSMakeRect(350, 15, 80, 30))
+okBtn.setTitle_("OK")
+okBtn.setBezelStyle_(NSRoundedBezelStyle)
+okBtn.setTarget_(handler)
+okBtn.setAction_(objc.selector(handler.onOK_, signature=b"v@:@"))
+window.contentView().addSubview_(okBtn)
+
+# Cancel Button
+cancelBtn = NSButton.alloc().initWithFrame_(NSMakeRect(260, 15, 80, 30))
+cancelBtn.setTitle_("Cancel")
+cancelBtn.setBezelStyle_(NSRoundedBezelStyle)
+cancelBtn.setTarget_(handler)
+cancelBtn.setAction_(objc.selector(handler.onCancel_, signature=b"v@:@"))
+window.contentView().addSubview_(cancelBtn)
+
+# Show window and focus
+window.makeKeyAndOrderFront_(None)
+window.makeFirstResponder_(textView)
+window.setLevel_(3)
+
+NSApp.runModalForWindow_(window)
+window.close()
+
+if result["confirmed"] and result["text"]:
+    print(result["text"])
+    sys.exit(0)
+sys.exit(1)
+'''
+        # Write to temp file
+        temp_file = Path(tempfile.gettempdir()) / "iterm2_script_dialog.py"
+        temp_file.write_text(pyobjc_script, encoding='utf-8')
+
+        try:
+            # Run with iTerm2's Python (has PyObjC)
+            import subprocess as sp
+            import concurrent.futures
+
+            # Use sys.executable to get iTerm2's Python path
+            python_path = sys.executable
+
+            def run_pyobjc_dialog():
+                proc = sp.Popen(
+                    [python_path, str(temp_file)],
+                    stdout=sp.PIPE,
+                    stderr=sp.PIPE,
+                    start_new_session=True
+                )
+                out, err = proc.communicate()
+                return proc.returncode, out.decode('utf-8'), err.decode('utf-8')
+
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                returncode, stdout_text, stderr_text = await loop.run_in_executor(pool, run_pyobjc_dialog)
+
+        finally:
+            # Clean up temp file
+            try:
+                temp_file.unlink()
+            except:
+                pass
+
+        if returncode != 0:
+            logger.debug(f"Script dialog stderr: {stderr_text}")
             return
 
-        output = stdout.decode("utf-8").strip()
-        user_input = None
-        if "text returned:" in output:
-            user_input = output.split("text returned:", 1)[1].strip()
+        user_input = stdout_text.strip()
 
         if not user_input:
             return
