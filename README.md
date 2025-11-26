@@ -1,4 +1,10 @@
-# iTerm2 AI 명령어 생성기
+# iTerm2 AI Command Generator / AI 명령어 생성기
+
+> AI command generator for iTerm2 using Google Gemini - Generate shell commands with natural language
+
+[![macOS](https://img.shields.io/badge/macOS-10.14+-blue)](https://www.apple.com/macos/)
+[![Python](https://img.shields.io/badge/Python-3.7+-green)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow)](./LICENSE)
 
 iTerm2에서 자연어로 원하는 작업을 설명하면 AI가 적절한 쉘 명령어를 생성해주는 플러그인입니다.
 
