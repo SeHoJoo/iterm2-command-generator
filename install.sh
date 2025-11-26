@@ -397,12 +397,35 @@ import objc
 from AppKit import (NSApplication, NSApp, NSWindow, NSScrollView, NSTextView,
                     NSButton, NSTextField, NSApplicationActivationPolicyRegular,
                     NSMakeRect, NSBezelBorder, NSBackingStoreBuffered,
-                    NSWindowStyleMaskTitled, NSWindowStyleMaskClosable, NSRoundedBezelStyle)
+                    NSWindowStyleMaskTitled, NSWindowStyleMaskClosable, NSRoundedBezelStyle,
+                    NSMenu, NSMenuItem, NSFont)
 from Foundation import NSObject
 
 NSApplication.sharedApplication()
 NSApp.setActivationPolicy_(NSApplicationActivationPolicyRegular)
 NSApp.activateIgnoringOtherApps_(True)
+
+# Create menu bar with Edit menu for copy/paste
+mainMenu = NSMenu.alloc().init()
+appMenu = NSMenu.alloc().init()
+appMenuItem = NSMenuItem.alloc().init()
+appMenuItem.setSubmenu_(appMenu)
+mainMenu.addItem_(appMenuItem)
+
+editMenu = NSMenu.alloc().initWithTitle_("Edit")
+editMenu.addItemWithTitle_action_keyEquivalent_("Undo", "undo:", "z")
+editMenu.addItemWithTitle_action_keyEquivalent_("Redo", "redo:", "Z")
+editMenu.addItem_(NSMenuItem.separatorItem())
+editMenu.addItemWithTitle_action_keyEquivalent_("Cut", "cut:", "x")
+editMenu.addItemWithTitle_action_keyEquivalent_("Copy", "copy:", "c")
+editMenu.addItemWithTitle_action_keyEquivalent_("Paste", "paste:", "v")
+editMenu.addItemWithTitle_action_keyEquivalent_("Select All", "selectAll:", "a")
+
+editMenuItem = NSMenuItem.alloc().init()
+editMenuItem.setSubmenu_(editMenu)
+editMenuItem.setTitle_("Edit")
+mainMenu.addItem_(editMenuItem)
+NSApp.setMainMenu_(mainMenu)
 
 # Create window
 window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
@@ -423,6 +446,7 @@ label.setBezeled_(False)
 label.setDrawsBackground_(False)
 label.setEditable_(False)
 label.setSelectable_(False)
+label.setFont_(NSFont.systemFontOfSize_(13))
 window.contentView().addSubview_(label)
 
 # ScrollView + TextView
@@ -435,6 +459,9 @@ textView.setMinSize_(NSMakeRect(0, 0, 390, 130).size)
 textView.setMaxSize_(NSMakeRect(0, 0, 10000, 10000).size)
 textView.setVerticallyResizable_(True)
 textView.textContainer().setWidthTracksTextView_(True)
+textView.setAllowsUndo_(True)
+textView.setFont_(NSFont.systemFontOfSize_(13))
+textView.setRichText_(False)
 
 scrollView.setDocumentView_(textView)
 window.contentView().addSubview_(scrollView)
@@ -459,12 +486,13 @@ okBtn.setTarget_(handler)
 okBtn.setAction_(objc.selector(handler.onOK_, signature=b"v@:@"))
 window.contentView().addSubview_(okBtn)
 
-# Cancel Button
+# Cancel Button (ESC key)
 cancelBtn = NSButton.alloc().initWithFrame_(NSMakeRect(260, 15, 80, 30))
 cancelBtn.setTitle_("Cancel")
 cancelBtn.setBezelStyle_(NSRoundedBezelStyle)
 cancelBtn.setTarget_(handler)
 cancelBtn.setAction_(objc.selector(handler.onCancel_, signature=b"v@:@"))
+cancelBtn.setKeyEquivalent_(chr(27))
 window.contentView().addSubview_(cancelBtn)
 
 # Show window and focus
