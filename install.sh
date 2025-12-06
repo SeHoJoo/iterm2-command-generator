@@ -30,15 +30,15 @@ if [ ! -d "$ITERM2_ENV_DIR" ]; then
     exit 1
 fi
 
-# Find iTerm2 pip
-ITERM2_PIP=$(find "$ITERM2_ENV_DIR" -name "pip3" -type f 2>/dev/null | head -1)
+# Find iTerm2 Python (using python3 -m pip ensures correct installation)
+ITERM2_PYTHON=$(find "$ITERM2_ENV_DIR" -name "python3" -type f 2>/dev/null | head -1)
 
-if [ -z "$ITERM2_PIP" ]; then
-    echo "Error: Cannot find pip in iTerm2 Python Runtime."
+if [ -z "$ITERM2_PYTHON" ]; then
+    echo "Error: Cannot find python3 in iTerm2 Python Runtime."
     exit 1
 fi
 
-echo "Found iTerm2 Python Runtime: $ITERM2_PIP"
+echo "Found iTerm2 Python: $ITERM2_PYTHON"
 
 # Create AutoLaunch directory if it doesn't exist
 if [ ! -d "$PLUGIN_DIR" ]; then
@@ -46,9 +46,21 @@ if [ ! -d "$PLUGIN_DIR" ]; then
     mkdir -p "$PLUGIN_DIR"
 fi
 
-# Install Python dependencies using iTerm2's pip
+# Install Python dependencies using iTerm2's python -m pip
+# This ensures packages are installed in the correct Python environment
 echo "Installing Python dependencies..."
-"$ITERM2_PIP" install -r requirements.txt
+"$ITERM2_PYTHON" -m pip install -r requirements.txt
+
+# Verify keyring installation
+echo "Verifying keyring installation..."
+if "$ITERM2_PYTHON" -c "import keyring; print('keyring OK')" 2>/dev/null; then
+    echo "✓ keyring module verified"
+else
+    echo "Error: keyring module installation failed"
+    echo "Try manual installation:"
+    echo "  $ITERM2_PYTHON -m pip install keyring"
+    exit 1
+fi
 
 # Copy script to AutoLaunch folder
 echo "Installing plugin..."
